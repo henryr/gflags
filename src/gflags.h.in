@@ -438,7 +438,7 @@ class GFLAGS_DLL_DECL FlagRegisterer {
   template <typename FlagType>
   FlagRegisterer(const char* name,
                  const char* help, const char* filename,
-                 FlagType* current_storage, FlagType* defvalue_storage);
+      FlagType* current_storage, FlagType* defvalue_storage, bool hidden);
 };
 
 // If your application #defines STRIP_FLAG_HELP to a non-zero value
@@ -473,7 +473,7 @@ extern GFLAGS_DLL_DECL const char kStrippedFlagHelp[];
 // FLAGS_no<name>.  This serves the second purpose of assuring a
 // compile error if someone tries to define a flag named no<name>
 // which is illegal (--foo and --nofoo both affect the "foo" flag).
-#define DEFINE_VARIABLE(type, shorttype, name, value, help)             \
+#define DEFINE_VARIABLE(type, shorttype, name, value, help, hidden)     \
   namespace fL##shorttype {                                             \
     static const type FLAGS_nono##name = value;                         \
     /* We always want to export defined variables, dll or no */         \
@@ -481,7 +481,7 @@ extern GFLAGS_DLL_DECL const char kStrippedFlagHelp[];
     type FLAGS_no##name = FLAGS_nono##name;                             \
     static GFLAGS_NAMESPACE::FlagRegisterer o_##name(                   \
       #name, MAYBE_STRIPPED_HELP(help), __FILE__,                       \
-      &FLAGS_##name, &FLAGS_no##name);                                  \
+      &FLAGS_##name, &FLAGS_no##name, hidden);                                 \
   }                                                                     \
   using fL##shorttype::FLAGS_##name
 
@@ -504,31 +504,56 @@ GFLAGS_DLL_DECL bool IsBoolFlag(bool from);
 // Here are the actual DEFINE_*-macros. The respective DECLARE_*-macros
 // are in a separate include, gflags_declare.h, for reducing
 // the physical transitive size for DECLARE use.
-#define DEFINE_bool(name, val, txt)                                     \
-  namespace fLB {                                                       \
-    typedef ::fLB::CompileAssert FLAG_##name##_value_is_not_a_bool[     \
-            (sizeof(::fLB::IsBoolFlag(val)) != sizeof(double))? 1: -1]; \
-  }                                                                     \
-  DEFINE_VARIABLE(bool, B, name, val, txt)
+#define DEFINE_bool(name, val, txt)                             \
+  namespace fLB {                                               \
+typedef ::fLB::CompileAssert FLAG_##name##_value_is_not_a_bool[ \
+    (sizeof(::fLB::IsBoolFlag(val)) != sizeof(double))? 1: -1]; \
+  }                                                             \
+  DEFINE_VARIABLE(bool, B, name, val, txt, false)
 
-#define DEFINE_int32(name, val, txt) \
-   DEFINE_VARIABLE(GFLAGS_NAMESPACE::int32, I, \
-                   name, val, txt)
+#define DEFINE_int32(name, val, txt)            \
+  DEFINE_VARIABLE(GFLAGS_NAMESPACE::int32, I,   \
+      name, val, txt, false)
 
-#define DEFINE_uint32(name,val, txt) \
-   DEFINE_VARIABLE(GFLAGS_NAMESPACE::uint32, U, \
-                   name, val, txt)
+#define DEFINE_uint32(name,val, txt)            \
+  DEFINE_VARIABLE(GFLAGS_NAMESPACE::uint32, U,  \
+                    name, val, txt, false)
 
-#define DEFINE_int64(name, val, txt) \
-   DEFINE_VARIABLE(GFLAGS_NAMESPACE::int64, I64, \
-                   name, val, txt)
+#define DEFINE_int64(name, val, txt)            \
+  DEFINE_VARIABLE(GFLAGS_NAMESPACE::int64, I64, \
+                    name, val, txt, false)
 
-#define DEFINE_uint64(name,val, txt) \
-   DEFINE_VARIABLE(GFLAGS_NAMESPACE::uint64, U64, \
-                   name, val, txt)
+#define DEFINE_uint64(name,val, txt)                    \
+  DEFINE_VARIABLE(GFLAGS_NAMESPACE::uint64, U64,        \
+                    name, val, txt, false)
 
-#define DEFINE_double(name, val, txt) \
-   DEFINE_VARIABLE(double, D, name, val, txt)
+#define DEFINE_double(name, val, txt)                   \
+  DEFINE_VARIABLE(double, D, name, val, txt, false)
+
+// WARNING: Make sure that these stay synced to their non-hidden equivalents above.
+// Hidden flags don't show up in --help, or any place that uses GetAllFlags().
+#define DEFINE_bool_hidden(name, val, txt) \
+  namespace fLB {                                               \
+typedef ::fLB::CompileAssert FLAG_##name##_value_is_not_a_bool[ \
+    (sizeof(::fLB::IsBoolFlag(val)) != sizeof(double))? 1: -1]; \
+  }                                                             \
+  DEFINE_VARIABLE(bool, B, name, val, txt, true)
+
+#define DEFINE_int32_hidden(name, val, txt)                             \
+  DEFINE_VARIABLE(GFLAGS_NAMESPACE::int32, I, name, val, txt, true)
+
+#define DEFINE_uint32_hidden(name, val, txt)                             \
+  DEFINE_VARIABLE(GFLAGS_NAMESPACE::uint32, U, name, val, txt, true)
+
+#define DEFINE_int64_hidden(name, val, txt)                             \
+  DEFINE_VARIABLE(GFLAGS_NAMESPACE::int64, I64, name, val, txt, true)
+
+#define DEFINE_uint64_hidden(name, val, txt)                             \
+  DEFINE_VARIABLE(GFLAGS_NAMESPACE::uint64, U64, name, val, txt, true)
+
+#define DEFINE_double_hidden(name, val, txt)                             \
+  DEFINE_VARIABLE(double, D, name, val, txt, true)
+
 
 // Strings are trickier, because they're not a POD, so we can't
 // construct them at static-initialization time (instead they get
@@ -558,7 +583,7 @@ class StringFlagDestructor {
   void *current_storage_;
   void *defvalue_storage_;
 
-public: 
+public:
 
   StringFlagDestructor(void *current, void *defvalue)
   : current_storage_(current), defvalue_storage_(defvalue) {}
@@ -588,13 +613,35 @@ public:
                                                              val);          \
     static GFLAGS_NAMESPACE::FlagRegisterer o_##name(                       \
         #name, MAYBE_STRIPPED_HELP(txt), __FILE__,                          \
-        FLAGS_no##name, new (s_##name[1].s) clstring(*FLAGS_no##name));     \
+        FLAGS_no##name, new (s_##name[1].s) clstring(*FLAGS_no##name),      \
+        false);                                                             \
     static StringFlagDestructor d_##name(s_##name[0].s, s_##name[1].s);     \
     extern GFLAGS_DLL_DEFINE_FLAG clstring& FLAGS_##name;                   \
     using fLS::FLAGS_##name;                                                \
     clstring& FLAGS_##name = *FLAGS_no##name;                               \
   }                                                                         \
   using fLS::FLAGS_##name
+
+// Straight copy of DEFINE_string, but string is defined as hidden.
+#define DEFINE_string_hidden(name, val, txt)                                \
+  namespace fLS {                                                           \
+    using ::fLS::clstring;                                                  \
+    using ::fLS::StringFlagDestructor;                                      \
+    static union { void* align; char s[sizeof(clstring)]; } s_##name[2];    \
+    clstring* const FLAGS_no##name = ::fLS::                                \
+                                   dont_pass0toDEFINE_string(s_##name[0].s, \
+                                                             val);          \
+    static GFLAGS_NAMESPACE::FlagRegisterer o_##name(                       \
+        #name, MAYBE_STRIPPED_HELP(txt), __FILE__,                          \
+        FLAGS_no##name, new (s_##name[1].s) clstring(*FLAGS_no##name),      \
+        true);                                                              \
+    static StringFlagDestructor d_##name(s_##name[0].s, s_##name[1].s);     \
+    extern GFLAGS_DLL_DEFINE_FLAG clstring& FLAGS_##name;                   \
+    using fLS::FLAGS_##name;                                                \
+    clstring& FLAGS_##name = *FLAGS_no##name;                               \
+  }                                                                         \
+  using fLS::FLAGS_##name
+
 
 #endif  // SWIG
 

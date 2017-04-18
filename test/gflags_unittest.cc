@@ -73,6 +73,7 @@ DEFINE_string(srcdir, StringFromEnv("SRCDIR", "."), "Source-dir root, needed to 
 DECLARE_string(tryfromenv);   // in gflags.cc
 
 DEFINE_bool(test_bool, false, "tests bool-ness");
+DEFINE_bool_hidden(test_bool_hidden, false, "test hidden bool-ness");
 DEFINE_int32(test_int32, -1, "");
 DEFINE_int64(test_int64, -2, "");
 DEFINE_uint32(test_uint32, 1, "");
@@ -218,7 +219,7 @@ namespace fLI {
   static FlagRegisterer o_tldflag1(
     "tldflag1",
     "should show up in --helpshort", "gflags_unittest.cc",
-    &FLAGS_tldflag1, &FLAGS_notldflag1);
+    &FLAGS_tldflag1, &FLAGS_notldflag1, false);
 }
 using fLI::FLAGS_tldflag1;
 
@@ -229,7 +230,7 @@ namespace fLI {
   static FlagRegisterer o_tldflag2(
     "tldflag2",
     "should show up in --helpshort", "gflags_unittest.",
-    &FLAGS_tldflag2, &FLAGS_notldflag2);
+    &FLAGS_tldflag2, &FLAGS_notldflag2, false);
 }
 using fLI::FLAGS_tldflag2;
 
@@ -323,6 +324,7 @@ void TestFlagString(const string& flags,
   EXPECT_EQ(expected_int32, FLAGS_test_int32);
   EXPECT_DOUBLE_EQ(expected_double, FLAGS_test_double);
 }
+
 
 
 // Tests reading flags from a string.
@@ -890,10 +892,20 @@ TEST(GetAllFlagsTest, BaseTest) {
       EXPECT_EQ(i->type, "bool");
       EXPECT_EQ(i->default_value, "false");
       EXPECT_EQ(i->flag_ptr, &FLAGS_test_bool);
-      break;
     }
+    EXPECT_NE(i->name, "test_bool_hidden");
   }
   EXPECT_TRUE(found_test_bool);
+}
+
+TEST(HiddenFlagsInFlagFileTest, BaseTest) {
+  string flags("--test_bool_hidden=true\n");
+  EXPECT_TRUE(ReadFlagsFromString(flags,
+          GetArgv0(),
+          // errors are fatal
+          true));
+
+  EXPECT_EQ(true, FLAGS_test_bool_hidden);
 }
 
 TEST(ShowUsageWithFlagsTest, BaseTest) {
@@ -1369,7 +1381,7 @@ TEST(ParseCommandLineFlagsWrongFields,
   static bool current_storage;
   static bool defvalue_storage;
   FlagRegisterer fr("flag_name", NULL, "filename",
-                    &current_storage, &defvalue_storage);
+      &current_storage, &defvalue_storage, false);
   CommandLineFlagInfo fi;
   EXPECT_TRUE(GetCommandLineFlagInfo("flag_name", &fi));
   EXPECT_EQ("", fi.description);
@@ -1569,4 +1581,3 @@ static int main(int argc, char **argv) {
 int main(int argc, char** argv) {
   return GFLAGS_NAMESPACE::main(argc, argv);
 }
-
